@@ -8,12 +8,6 @@ on:
         default: 'treble_arm64_bgN'
         required: false
         type: string
-  # push:
-  #   branches:
-  #     - android-15.0
-  #   paths-ignore:
-  #     - '.github/**'
-  #     - 'config/**'
 
 concurrency:
   group: ${{ github.workflow }}
@@ -21,7 +15,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,21 +23,30 @@ jobs:
       - name: Set Build Variant
         run: echo "BUILD_VARIANT=${{ inputs.build_variant || 'treble_arm64_bgN' }}" >> $GITHUB_ENV
 
-      - name: Build Image
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y docker.io python3-pip unzip xz-utils
+          pip3 install docker-compose
+
+      - name: Setup Docker
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build Docker Image
         run: docker build -f build/Dockerfile -t ponces/treble .
 
       - name: Build ROM
         run: |
-          mkdir builds
+          mkdir -p builds
           docker run --rm \
                      --privileged \
-                     --name test \
-                     --volume /root/.ssh:/root/.ssh \
+                     --name treble-build \
+                     --volume ${{ runner.temp }}/.ssh:/root/.ssh \
                      --volume ${{ github.workspace }}/builds:/root/builds \
                      ponces/treble treblebuild ${{ env.BUILD_VARIANT }}
 
       - name: Upload ROM
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: ${{ env.BUILD_VARIANT }}
           path: builds/*.xz
